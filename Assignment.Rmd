@@ -1,0 +1,459 @@
+---
+title: "MA4128 Assignment"
+author: "Gerard Holian 16170571"
+date: "20/4/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+require(MASS)
+require(tidyverse)
+require(GGally)
+require(corrplot)
+require(kableExtra)
+require(MVA)
+require(mclust)
+require(readxl)
+# Add any other packages you may need here
+
+```
+
+```{r, include = FALSE}
+# Load in the data set for Question 1.
+kangaroo = read.csv("kangaroo.csv")
+
+# Load in the data set for Question 1.
+newkangs = read_excel("newkangs.xlsx")
+
+# Load in the data set for Question 3. 
+USair = data(USairpollution)
+
+```
+
+## Question 1 
+
+```{r, fig.height=4, fig.width=5}
+# (a)i 
+kangaroo %>%
+ group_by(Species) %>%
+  ggplot(aes(x = nas.l)) + geom_histogram(bins=20) + facet_wrap(~Species) +
+  theme_bw()
+
+kangaroo %>%
+ group_by(Species) %>%
+  ggplot(aes(x = nas.w)) + geom_histogram(bins=20) + facet_wrap(~Species) +
+  theme_bw()
+
+kangaroo %>%
+ group_by(Species) %>%
+  ggplot(aes(x = inc.l)) + geom_histogram(bins=20) + facet_wrap(~Species) +
+  theme_bw()
+
+kangaroo %>%
+ group_by(Species) %>%
+  ggplot(aes(x = man.l)) + geom_histogram(bins=20) + facet_wrap(~Species) +
+  theme_bw()
+
+kangaroo %>%
+ group_by(Species) %>%
+  ggplot(aes(x = man.w)) + geom_histogram(bins=20) + facet_wrap(~Species) +
+  theme_bw()
+# data is normal
+
+attach(kangaroo)
+classify.lda<-lda(Species~., kangaroo)
+classify.lda
+
+N = nrow(kangaroo)
+G = length(levels(kangaroo$Species))
+
+# Covariance matrix for Fuliginosus group
+cov.fulig = kangaroo %>% 
+  dplyr::filter(Species == "fuliginosus") %>%
+  dplyr::select(nas.l, nas.w, inc.l, man.l, man.w) %>%
+  do(as.data.frame(cov(.)))
+
+# Number in Fuliginosus group
+n.fulig = kangaroo %>% 
+  dplyr::filter(Species == "fuliginosus") %>%
+  summarise(n=n())
+
+# Covariance matrix for Gigan- teus group
+cov.gigan = kangaroo %>% 
+  dplyr::filter(Species == "giganteus") %>%
+  dplyr::select(nas.l, nas.w, inc.l, man.l, man.w) %>%
+  do(as.data.frame(cov(.)))
+
+# Number in giganteus group
+n.gigan = kangaroo %>% 
+  dplyr::filter(Species == "giganteus") %>%
+  summarise(n=n())
+
+# Covariance matrix for Melanops group
+cov.melan = kangaroo %>% 
+  dplyr::filter(Species == "melanops") %>%
+  dplyr::select(nas.l, nas.w, inc.l, man.l, man.w) %>%
+  do(as.data.frame(cov(.)))
+
+# Number in giganteus group
+n.melan = kangaroo %>% 
+  dplyr::filter(Species == "melanops") %>%
+  summarise(n=n())
+
+
+kangaroo %>%
+  dplyr::select(nas.l, nas.w, inc.l, man.l, man.w) %>%
+ggpairs(upper = list(continuous = "blank", discrete = "blank"), lower=list(continuous = "points", discrete="blank"), diag = list(continuous = "densityDiag", discrete="blankDiag"), ggplot2::aes(colour=kangaroo$Species)) + theme_bw()
+
+cov.pool = (cov.fulig*(n.fulig$n-1) + cov.gigan*(n.gigan$n-1)+ cov.melan*(n.melan$n-1))/(N - G)
+cov.pool
+
+x<-data.frame(nas.l=855, nas.w=247, inc.l=125, man.l=1253, man.w=140)
+
+ldf = function(x, prior, mu, covar)
+{
+    x = matrix(as.numeric(x), ncol=1)
+    log(prior) - (0.5*t(mu)%*%solve(covar)%*%mu) + (t(x)%*%solve(covar)%*%mu) 
+}
+
+dfs.x = rep(0, G)
+for(g in 1:G)
+{
+   dfs.x[g] = ldf(x, classify.lda$prior[g], classify.lda$mean[g,], cov.pool)
+}
+dfs.x
+```
+
+
+
+
+```{r}
+# (a)ii
+levels(kangaroo$Species)[dfs.x == max(dfs.x)]
+
+```
+The answer was attained by getting the maximum linear discriminant function which in this case indicated giganteus.
+
+
+
+```{r}
+# (a)iii
+z1<-exp(dfs.x)/sum(exp(dfs.x))
+z1
+```
+
+
+
+```{r}
+# (a)iv
+x1<-data.matrix(x, rownames.force = NA)
+x1
+covmat<-data.matrix(cov.pool, rownames.force = NA)
+covmat
+
+qda.res <- qda(Species ~ .,kangaroo)
+qda.res
+
+qdf = function(x, prior, mu, covar)
+{
+    x = matrix(as.numeric(x), ncol=1)
+    log(prior) - (0.5*log(det(covar)))-(0.5*t(x-mu)%*%solve(covar)%*%(x-mu)) 
+      
+}
+
+dfs.2 = rep(0, G)
+for(g in 1:G)
+{
+   dfs.2[g] = qdf(x1, qda.res$prior[g], qda.res$mean[g,], covmat)
+}
+dfs.2
+```
+
+
+
+
+```{r}
+# (a)v
+levels(kangaroo$Species)[dfs.2 == max(dfs.2)]
+```
+Kangaroo belongs to giganteus species, which is the same conclusion as in (a)ii
+
+
+
+
+```{r}
+# (a)vi
+z2<-exp(dfs.2)/sum(exp(dfs.2))
+z2
+```
+The probabilities are unchanged when using QDA vs LDA
+
+
+
+
+
+
+```{r}
+# (b)
+
+nk1<-data.frame(nas.l=687, nas.w=223, inc.l=105, man.l=1258, man.w=131)
+nk2<-data.frame(nas.l=562, nas.w=216, inc.l=102, man.l=1094, man.w=122)
+nk3<-data.frame(nas.l=564, nas.w=207, inc.l=79, man.l=1090, man.w=132)
+nk4<-data.frame(nas.l=864, nas.w=306, inc.l=137, man.l=1526, man.w=138)
+nk5<-data.frame(nas.l=494, nas.w=196, inc.l=72, man.l=1046, man.w=131)
+
+
+# input 5 new kangaroos into lda function
+dfs.nk = rep(0, G)
+for(g in 1:G)
+{
+   dfs.nk[g] = ldf(nk5, classify.lda$prior[g], classify.lda$mean[g,], cov.pool)
+}
+dfs.nk
+
+
+levels(kangaroo$Species)[dfs.nk == max(dfs.nk)]
+
+#  kangaroos number 2,4 and 5 correctly classified
+#  kangaroos 1 and 3 incorrectly classified
+
+
+#input 5 new kangaroos into qda function
+dfs.2 = rep(0, G)
+for(g in 1:G)
+{
+   dfs.2[g] = qdf(nk5, qda.res$prior[g], qda.res$mean[g,], covmat)
+}
+dfs.2
+
+levels(kangaroo$Species)[dfs.2 == max(dfs.2)]
+
+#  kangaroos number 2,4 and 5 correctly classified
+#  kangaroos 1 and 3 incorrectly classified
+```
+LDA: 3 out of 5 kangaroos were classified correctly, therefore missclassification rate is 40%.
+QDA: 3 out of 5 kangaroos were classified correctly, therefore missclassification rate is 40%.
+
+
+
+
+
+
+```{r}
+# (c)
+classify.lda.cv<-lda(Species~., CV=TRUE, data=kangaroo)
+results.lda = data.frame(pred.class = classify.lda.cv$class, post.prob = classify.lda.cv$posterior)
+table(classify.lda.cv$class, kangaroo$Species)
+
+
+classify.qda.cv<-qda(Species~., CV=TRUE, data=kangaroo)
+results.qda = data.frame(pred.class = classify.qda.cv$class, post.prob = classify.qda.cv$posterior)
+table(classify.qda.cv$class, kangaroo$Species)
+```
+The LDA and QDA functions have an equal rate of accuracy on the new data (both 60%).
+The LDA classifies better on the data used to build the models with an accuracy rate of 67.33% compared to 65.35% of the LDA model. Therefore, I would choose LDA to classify the data. 
+
+
+
+
+
+
+## Question 3
+
+## Technical Report
+
+### Introduction
+
+In this project, I will analyze a dataset called 'USairpollution'. This analysis will attempt to determine cities that display similar pollution characteristics. The variables included in the dataset are as follows: city, S02 (average annual sulphur dioxide level), temp (average annual temperature measured in degrees fahrenheit), manu (number of manufacturing enterprises employing 20 or more employees), popul (poulation size measured in thousands), wind (average annual wind speed measured in mph), precip (average annual precipitation measured in inches), and finally predays (average number of days with precipitation per year.
+
+The table below shows the summary statistics of the variables
+```{r}
+# Write your R code for the exploratory analysis (plots and summary statistics), etc here.
+head(USairpollution)
+
+df <- tbl_df(USairpollution)
+df.sum <- df %>%
+  summarise_all(list(min = ~min(.), 
+                      q25 = ~quantile(., 0.25), 
+                      median = ~median(.), 
+                      q75 = ~quantile(., 0.75), 
+                      max = ~max(.),
+                      mean = ~mean(.), 
+                      sd = ~sd(.)))
+
+
+# reshape the output for presentation in a table
+df.sum %>% gather(stat, val) %>%
+  separate(stat, into = c("var", "stat"), sep = "_") %>%
+  spread(stat, val) %>%
+  select(var, min, q25, median, q75, max, mean, sd) %>%
+  kable() %>%
+  kable_styling()
+
+```
+The tables above indicates that the data may have to be standardised. The variance of all the variables must also be assessed to determine if it must be standardised. This can be done by looking at the plot below.
+```{r}
+ggpairs(USairpollution) + theme_bw()
+```
+
+This plot reveals that the data must be standardised due to the variance of each of the variables being so different. Standardising the data is performed in order to give these variables a standard deviation of 1. The updated summary statistics of the variables can be seen in the table below.
+
+```{r}
+# standardise data
+StDev = apply(USairpollution, 2, sd)
+StDev
+std.arrests = sweep(USairpollution, 2, StDev, "/")
+
+df.std <- tbl_df(std.arrests)
+df.std.sum <- df.std %>%
+  summarise_all(list(min = ~min(.), 
+                      q25 = ~quantile(., 0.25), 
+                      median = ~median(.), 
+                      q75 = ~quantile(., 0.75), 
+                      max = ~max(.),
+                      mean = ~mean(.), 
+                      sd = ~sd(.)))
+
+
+# reshape the output for presentation in a table
+df.std.sum %>% gather(stat, val) %>%
+  separate(stat, into = c("var", "stat"), sep = "_") %>%
+  spread(stat, val) %>%
+  select(var, min, q25, median, q75, max, mean, sd) %>%
+  kable() %>%
+  kable_styling()
+```
+### Hierachical Clustering
+To determine which cities exhibit similar pollution characteristics, a cluster analysis was carried out. A hierarchical clustering analysis which used Ward's method was the chosen technique. This method was chosen due to it producing clearer clusters in comparison to other methods like single, average and complete linkage. The dendrogram is plotted in the figure below and was cut at a height of 2000 to come to a decision of choosing 5 clusters. 
+```{r}
+dist.mat = dist(USairpollution, method="euclidean")
+
+
+hcl.avg <- hclust(dist.mat, method="average")
+hcl.sing <- hclust(dist.mat, method="single")
+hcl.comp <- hclust(dist.mat, method="complete")
+hcl.ward <- hclust(dist.mat, method="ward.D")
+
+
+plot(hcl.ward)
+
+hcl.ward2 <- cutree(hcl.ward, h = 2000)
+
+```
+This resulted in the data being clustered into 5 clusters relating to similar pollution characteristics. The output and table below shows to which cluster each city was assigned to and how many cities were assigned to each cluster. It is clear Chicago is an outliar as it is in its own cluster. The fact that the dataset contained an outliar proved the decision to use hierarchical clustering over k-means clustering a good one, as k-means clustering can be sensitive to outliars. 
+
+```{r}
+hcl.ward2 <- cutree(hcl.ward, h = 2000)
+hcl.ward2
+table(hcl.ward2)
+```
+### Principal  Component Analysis
+In order to understand what the main sources of variation in the data, principal component analysis was carried out. Principal components analysis (PCA) is a means of ‘re-expressing’ the data so as to retain most of the information in the data. PCA can be used to reduce many correlated variables in a dataset to a few new uncorrelated variables. In the table below is a correlation matrix which shows the correlations between variables.
+
+```{r}
+mycor<-cor(USairpollution)
+mycor
+ 
+```
+There is a very strong positive relationship between manu and popul (r = 0.95). There are also moderate positive relationships between predays and precip (r = 0.54), and manu and SO2(r = 0.64). There is also a positive relationship between popul and SO2 (r = 0.49).
+
+The principal components can be extracted using the code below which calculates the eigenvakues of the correlation matrix.
+```{r}
+eigs<-eigen(cor(USairpollution))
+eigs$values
+```
+The proportion of the variation explained by the principal components can be calculated using the output above. The proportion of variation explained by PC1 is 59.6%, PC2 is 18.3%, PC3 is 15.6%, PC4 is 6.37% and PC5 and PC6 both explain variation of less than 1%.
+
+To determine the number of principal components to retain a scree plot is created. The number of components is where an 'elbow' appears on the curve.
+```{r}
+pcair<-princomp(USairpollution, cor = TRUE)
+dat = data.frame(PC=1:7, lambda=pcair$sdev^2)
+
+ggplot(aes(x=PC, y=lambda), data=dat) + geom_line() +ylab("Eigenvalue")+ xlab("PC") + theme_bw()
+```
+
+There are two possible elbows on this graph at PC2 and PC3, but as it is generally considered to look for eigenvalues greater than one, it was therefore decided to extract 3 principal components. These 3 explain 92% of the variation in the data.
+
+```{r}
+pcair<-princomp(USairpollution, cor = TRUE)
+pcair$loadings
+```
+The loadings for each variable in each of the components can be seen in the matrix above which is the eigenvectors of the correlation matrix. 
+
+PC1 has a positive loading on SO2, manu, predays, wind and popul. It has a negative loading on temp. It could be interpreted as a measure of overall quality of life. Cities with high negative scores in PC1 will have higher than average temperature, but will have lower population, manufacturing enterprises, average wind speed, days of precipitation and sulphur dioxide levels. Cities with high positive scores in this component will have lower than average temperature, but higher population, manufacturing enterprises, average wind speed, days of precipitation and sulphur dioxide levels. Manufacturing enterprises is the most important variable. This could be interpreted as 'overall measure of quality of life component'.
+
+PC2 has a positive loading on predays and precip. It has a negative loading on manu and popul. Cities with high negative scores in PC2 will have higher populations and manufacturing enterprises, but lower precipitation and days of precipitation. Cities with large positive scores in PC2 will have lower populations and manufacturing firms, but higher precipitation levels and days of precipitation. Precipitation days is the most important variable in this component. PC2 could be interpreted as a 'rainy, smaller city component'
+
+PC3 has positive loadings on temp, manu, popul and precip. It has negative loadings on wind and predays. Cities with large negative scores in this PC will have lower temperatures, populations, manufacturing enterprises and precipitation but higher average wind speed. Cities with large positive scores in PC3 will have higher temperatures, populations, manufacturing enterprises and precipitation, but will have lower wind speeds. Temperature is the most important variable in this component. PC3 could be interpreted as 'larger, warmer, rainy city component'. 
+
+### Visualising Results
+In order to visualise the results obtained from the analysis, a plot of the component scores with the cities coloured according to the cluster they are in. The first graph plots PC1 (X-axis) versus PC2 (Y-axis).
+```{r}
+
+pc.soln = data.frame(PC1 = pcair$scores[,1], PC2 = pcair$scores[,2], PC3 = pcair$scores[,3], cluster=as.factor(hcl.ward2), area=rownames(USairpollution))
+
+ggplot(pc.soln, aes(x=PC1, y=PC2, colour=cluster)) +
+  geom_point() + 
+  geom_text(label=pc.soln$area, nudge_x = 0.25, nudge_y = 0.2) + theme_bw()
+
+
+```
+
+The above graph distinguishes the clusters reasonably well. It is clear from the graph that Chicago is outlying on PC1, this is because of its high population and sulphur dioxide levels and its large number of manufacturing firms. Phoenix is outlying on PC2 as it has very low rainfall and high population. The clusters are reasonably well distinguished by PC1 and PC2.
+
+```{r}
+ggplot(pc.soln, aes(x=PC1, y=PC3, colour=as.factor(cluster))) +
+  geom_point() + 
+  geom_text(label=pc.soln$area, nudge_x = 0.25, nudge_y = 0.2) + theme_bw()
+```
+
+The graph above plots PC1 (X-axis) versus PC3 (Y-axis). The clusters are reasonably well distinguished from one another, but less so than in the previous plot. Miami and New Orleans are outlying from their cluster due to high temperatures. Buffalo is outlying from its cluster due to low temperature.
+
+
+```{r}
+ggplot(pc.soln, aes(x=PC2, y=PC3, colour=as.factor(cluster))) +
+  geom_point() + 
+  geom_text(label=pc.soln$area, nudge_x = 0.25, nudge_y = 0.2) + theme_bw()
+
+```
+
+The plot above is of PC2 (X-axis) versus PC3 (Y-axis). This plot distinguishes the clusters the worst.
+
+
+
+### Conclusion 
+This project explored hierarchical clustering analysis as a method of identifying cities in America that exhibit similar pollution characteristics. The method of hierarchical clustering was chosen instead of k-means clustering as k-means clustering is sensitive to outliers which can decrease its ability to perform. 
+
+A plot of the variances of the variables was generated to decide if the variables should be standardised. This determined that the variables should be standardised due to differences in the variable variances. The decision of 5 clusters was chosen as minimised the difference between cluster sizes, while retaining enough clusters to warrant analysis. The cities were put in the 5 clusters with Chicago being an outlier it was put in cluster 4 on its own. This was due to high population, manufacturing firms and wind.
+
+The cities that were put into cluster 1 generally have more days of precipitation and higher precipitation, but less manufacturing firms and lower populations and sulphur dioxide levels. The cities in cluster 2 generally have higher precipitation and days of precipitation and have average temperatures. The cities in cluster 3 generally have high populations, manufacturing firms and sulphur dioxide levels. Cities in cluster 5 generally have above average manufacturing firms and temperature.
+
+The principal component analysis was used as a means of understanding the variability in the data. This was also needed to visualise the clusters. The scree plot determined the number of principal components (PCs). This lead to 3 PCs which accounted for 92% of the variation in the data. PC1 was interpreted as overall quality of life component, PC2 was interpreted as the smaller, rainy city component and PC3 was interpreted as the larger, warmer rainy city component. The 3 PCs were then plotted against each other to visualise the clusters. The clusters were reasonably well distinguished. This proved the chosen method of clustering and linkage to be a good choice.
+
+
+
+
+
+### Non-Technical Report
+
+In this project, a data set was analysed to identify cities that exhibit similar pollution charateristics. The variables included in the data set were as follows: City, temp (aerage annual temperature), manu (number of manufacturing enterprises with 20 or more employees), wind (average annual wind speed), precip (average annual precipitation), predays (average number od days with precipitation per year), popul (population size) and SO2 (average annual S02 level).
+
+A cluster analysis was used to group the cities that had similar pollution charactersitics together. Hierarchical lustering was the chosen method of clustering as there was outliers in the data set that contained extreme values. The method of linkage used was Ward's method which is the sum of the squared distance of each city from the most representative city (centroid) in each cluster. The output below shows which cluster each city was assigned to and the table shows the number of cities in each cluster.
+
+```{r } 
+hcl.ward2
+table(hcl.ward2)
+```
+The cities that were put into cluster 1  generally have more days of precipitation and higher preccipitation, but less manufacturing firms and lower populations and sulphur dioixide levels. The cities in cluster 2 generally have higher precipitation and days of precipitation and have average temperatures. The cities in cluster 3 generally have high populations, manufacturing firms and sulphur dioixide levels. Chicago is the only city in cluster 4 as it exhibits a very high population and number of manufacturing firms and also very high sulphur dioxide levels. Cities in cluster 5 generally have above average manufacturing firms and temperature.
+
+The results of this cluster analysis were visualisd using a principal component analysis which allows the clsuters to be distinguished on a plot. Principal component analysis is a means of reexpressing the data so as to retain most of the information in it. Three principal components (PCs) were extracted that explained over 92% of the variation in the data. This analysis concluded that the choice of hierarchical clustering is a useful method of idetifying cities that exhibit similar pollution characteristics. The plot below shows the clusters distinguihed using PC1 and PC2. 
+```{r }
+ggplot(pc.soln, aes(x=PC1, y=PC2, colour=cluster)) +
+  geom_point() + 
+  geom_text(label=pc.soln$area, nudge_x = 0.25, nudge_y = 0.2) + theme_bw()
+
+```
